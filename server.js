@@ -28,32 +28,62 @@ db.run(`
 
 // **Function to Add a Device to Mosquitto**
 function addMqttUser(username, password, callback) {
-    exec(`mosquitto_passwd -b ${MQTT_PASSWD_FILE} ${username} ${password}`, (error, stdout, stderr) => {
-        if (error) {
-            console.error(`Error adding MQTT user: ${stderr}`);
-            return callback(error);
+    const passwdEntry = `${username}:${password}\n`;  // Format: username:password
+
+    // Read the current mosquitto passwd file content
+    fs.readFile(MQTT_PASSWD_FILE, 'utf8', (err, data) => {
+        if (err && err.code !== 'ENOENT') {
+            console.error(`Error reading password file: ${err}`);
+            return callback(err);
         }
-        console.log(`Added MQTT user: ${username}`);
-        callback(null);
+
+        // Append the new username and password to the file content
+        const updatedPasswdContent = data ? data + passwdEntry : passwdEntry;
+
+        // Write the updated content back to the password file
+        fs.writeFile(MQTT_PASSWD_FILE, updatedPasswdContent, (err) => {
+            if (err) {
+                console.error(`Error writing password file: ${err}`);
+                return callback(err);
+            }
+            console.log(`Added MQTT user: ${username}`);
+            callback(null);
+        });
     });
 }
+
 
 // **Function to Add ACL for a Device**
 function addMqttAcl(username) {
     const aclEntry = `
-		user ${username}
-		topic read ${username}/data
-		topic write ${username}/control
-	`;
+        user ${username}
+        topic read ${username}/data
+        topic write ${username}/control
+    `;
 
-    fs.appendFile(MQTT_ACL_FILE, aclEntry, (err) => {
+    // Read the current ACL file content
+    fs.readFile(MQTT_ACL_FILE, 'utf8', (err, data) => {
         if (err) {
-            console.error(`Error writing ACL file: ${err}`);
-        } else {
-            console.log(`ACL added for ${username}`);
+            console.error(`Error reading ACL file: ${err}`);
+            return;
         }
+
+        // Check if the file already has content; if so, add a newline before appending the new ACL entry
+        const updatedAclContent = data.trim() + '\n' + aclEntry;
+
+        // Write the updated content back to the ACL file
+        fs.writeFile(MQTT_ACL_FILE, updatedAclContent, (err) => {
+            if (err) {
+                console.error(`Error writing ACL file: ${err}`);
+            } else {
+                console.log(`ACL added for ${username}`);
+            }
+        });
     });
 }
+
+
+
 
 // **Function to Reload Mosquitto Without Restart**
 function reloadMosquitto() {
