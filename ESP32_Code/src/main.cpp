@@ -22,13 +22,14 @@
 #include <ArduinoJson.h>
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
+#include <Preferences.h>
 
 // Replace with your WiFi credentials
-const char* ssid = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
+const char* ssid = "RD-SEAI_2.4G";
+const char* password = "";
 
 // Replace with your IoT server's IP and port
-const char* server_url = "http://YOUR_SERVER_IP:3000";
+const char* server_url = "http://172.28.182.164:3000";
 
 // MQTT Credentials (To be received from the server)
 String mqtt_broker;
@@ -37,6 +38,7 @@ String mqtt_username;
 String mqtt_password;
 String pub_topic;
 String sub_topic;
+Preferences preferences;
 
 // Token for authentication
 String jwt_token;
@@ -53,11 +55,10 @@ String getMacAddress() {
 // Function to send HTTP POST request
 String sendHttpPost(const String& endpoint, const String& payload) {
     HTTPClient http;
-    WiFiClientSecure client;
-    client.setInsecure(); // For development; use certificates in production
+    WiFiClient client;  // WiFiClient is used for HTTP (non-secure)
 
     String fullUrl = String(server_url) + endpoint;
-    http.begin(client, fullUrl);
+    http.begin(client, fullUrl);  // Initiate HTTP connection
     http.addHeader("Content-Type", "application/json");
 
     if (jwt_token != "") {
@@ -76,6 +77,7 @@ String sendHttpPost(const String& endpoint, const String& payload) {
     http.end();
     return response;
 }
+
 
 // Function to validate the device
 bool validateDevice() {
@@ -114,6 +116,12 @@ bool registerDevice() {
     if (response.indexOf("Device registered successfully") != -1) {
         mqtt_username = doc["mqtt_username"].as<String>();
         mqtt_password = doc["mqtt_password"].as<String>();
+
+        // Store mqtt_username in flash memory
+        preferences.begin("device_data", false);  // Open the preferences namespace
+        preferences.putString("mqtt_username", mqtt_username);  // Save the username
+        preferences.end();  // Close the preferences
+
         Serial.println("Device registered successfully.");
         return true;
     }   
@@ -126,29 +134,36 @@ bool registerDevice() {
 bool getMqttInfo() {
     Serial.println("Getting MQTT information...");
 
+    // Construct the full URL for the GET request
     String fullUrl = String(server_url) + "/api/get-mqtt-info?username=" + mqtt_username;
+    
+    // Use WiFiClient for non-secure HTTP connection
     HTTPClient http;
-    WiFiClientSecure client;
-    client.setInsecure();
+    WiFiClient client;  // Use WiFiClient for HTTP (non-secure)
 
-    http.begin(client, fullUrl);
-    http.addHeader("Authorization", "Bearer " + jwt_token);
+    http.begin(client, fullUrl);  // Begin HTTP connection
+    http.addHeader("Authorization", "Bearer " + jwt_token);  // Add JWT token for authorization
 
-    int httpResponseCode = http.GET();
+    http.setTimeout(5000);
+
+    int httpResponseCode = http.GET();  // Send GET request
     String response = "";
 
     if (httpResponseCode > 0) {
-    response = http.getString();
+        response = http.getString();  // Get the response body as a string
     } else {
+        // Print error if request fails
         Serial.printf("Failed to get MQTT info. Error: %s\n", http.errorToString(httpResponseCode).c_str());
         return false;
     }
 
-    http.end();
+    http.end();  // Close HTTP connection
 
+    // Parse the JSON response
     DynamicJsonDocument doc(512);
     deserializeJson(doc, response);
 
+    // Check if the server responded with success
     if (response.indexOf("MQTT information retrieved successfully") != -1) {
         mqtt_broker = doc["mqttInfo"]["broker_ip"].as<String>();
         mqtt_port = doc["mqttInfo"]["port"].as<int>();
@@ -162,6 +177,24 @@ bool getMqttInfo() {
     return false;
 }
 
+
+void getMqttUsernameFromFlash() {
+    // Initialize Preferences library
+    preferences.begin("device_data", true);  // Open the preferences in read-only mode
+
+    // Check if the username is stored
+    String storedUsername = preferences.getString("mqtt_username", "");  // Default to empty string if not found
+    
+    if (storedUsername != "") {
+        Serial.println("Stored MQTT Username: " + storedUsername);
+        mqtt_username = storedUsername;  // Set the mqtt_username to the stored value
+    } else {
+        Serial.println("No stored MQTT Username found.");
+    }
+
+    preferences.end();  // Close the preferences
+}
+
 // Function to connect to MQTT
 WiFiClientSecure espClient;
 PubSubClient mqttClient(espClient);
@@ -169,23 +202,23 @@ PubSubClient mqttClient(espClient);
 void connectToMqtt() {
     Serial.println("Connecting to MQTT broker...");
 
-    espClient.setInsecure();
-    mqttClient.setServer(mqtt_broker.c_str(), mqtt_port);
+  // espClient.setInsecure();
+  // mqttClient.setServer(mqtt_broker.c_str(), mqtt_port);
 
-    while (!mqttClient.connected()) {
-        Serial.println("Attempting MQTT connection...");
-        if (mqttClient.connect(mqtt_username.c_str(), mqtt_username.c_str(), mqtt_password.c_str())) {
-            Serial.println("Connected to MQTT broker.");
-            mqttClient.subscribe(sub_topic.c_str());
-        } else {
-            Serial.print("Failed, retrying in 5 seconds...");
-            delay(5000);
-        }
-    }
+  // while (!mqttClient.connected()) {
+  //   Serial.println("Attempting MQTT connection...");
+  //   if (mqttClient.connect(mqtt_username.c_str(), mqtt_username.c_str(), mqtt_password.c_str())) {
+  //     Serial.println("Connected to MQTT broker.");
+  //     mqttClient.subscribe(sub_topic.c_str());
+  //   } else {
+  //     Serial.print("Failed, retrying in 5 seconds...");
+  //     delay(5000);
+  //   }
+  // }
 }
 
 void setup() {
-    Serial.begin(115200);
+    Serial.begin(9600);
     WiFi.begin(ssid, password);
 
     Serial.print("Connecting to WiFi...");
@@ -195,30 +228,33 @@ void setup() {
     }
     Serial.println("\nWiFi connected!");
 
-  // Step 1: Validate Device
+    // Step 1: Validate Device
     if (!validateDevice()) {
     // Step 2: Register Device
         if (!registerDevice()) {
-            Serial.println("Failed to register device.");
-            return;
+        Serial.println("Failed to register device.");
+        return;
         }
 
         // Step 3: Get JWT Token
+        delay(500);
         if (!validateDevice()) {
-            Serial.println("Failed to get JWT token.");
-            return;
+        Serial.println("Failed to get JWT token.");
+        return;
         }
     }
 
-  // Step 4: Get MQTT Info
+    // Step 4: Get MQTT Info
+    delay(500);
+    getMqttUsernameFromFlash();
     if (!getMqttInfo()) {
         Serial.println("Failed to get MQTT info.");
         return;
     }
 
-  // Step 5: Connect to MQTT
+    // Step 5: Connect to MQTT
     connectToMqtt();
-}
+    }
 
 void loop() {
     mqttClient.loop();
