@@ -1,4 +1,5 @@
 const express = require('express');
+const https = require('https');
 const bodyParser = require('body-parser');
 const jwt = require('jsonwebtoken');
 const env_config = require('./config'); // Import the config module
@@ -11,6 +12,12 @@ const MQTT_PASSWD_FILE = "/etc/mosquitto/pwfile";
 const MQTT_ACL_FILE = "/etc/mosquitto/aclfile";
 const MQTT_BROKER_IP = "172.28.182.164";
 const MQTT_PORT = 1883;
+
+// Certificate
+const options = {
+    key: fs.readFileSync('/home/pi/IOT_Server/server.key'),
+    cert: fs.readFileSync('/home/pi/IOT_Server/server.crt')
+};
 
 // Initialize Express app
 const app = express();
@@ -56,10 +63,10 @@ function addMqttUser(username, password, callback) {
 // **Function to Add ACL for a Device**
 function addMqttAcl(username) {
     const aclEntry = `
-        user ${username}
-        topic read ${username}/data
-        topic write ${username}/control
-    `;
+user ${username}
+topic read ${username}/data
+topic write ${username}/control
+`;
 
     // Read the current ACL file content
     fs.readFile(MQTT_ACL_FILE, 'utf8', (err, data) => {
@@ -218,12 +225,10 @@ app.get('/api/get-mqtt-info', verifyToken, (req, res) => {
 });
 
 
-
-// Start HTTP server
-const SERVER_IP = '0.0.0.0'; // Listen on all interfaces
-const PORT = 3000;
-
-app.listen(PORT, SERVER_IP, () => {
-    console.log(`Server is running at http://${SERVER_IP}:${PORT}`);
+// Start HTTPS server
+const SERVER_IP = '172.28.182.164'; 
+const PORT = 3000; // Standard HTTPS port
+https.createServer(options, app).listen(PORT, SERVER_IP, () => {
+    console.log(`HTTPS Server running at https://${SERVER_IP}:${PORT}`);
     reloadMosquitto();
 });
