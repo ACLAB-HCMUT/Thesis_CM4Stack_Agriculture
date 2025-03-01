@@ -29,7 +29,28 @@ const char* ssid = "RD-SEAI_2.4G";
 const char* password = "";
 
 // Replace with your IoT server's IP and port
-const char* server_url = "http://172.28.182.164:3000";
+const char* server_url = "https://172.28.182.164:3000";
+
+const char* root_ca = 
+    "-----BEGIN CERTIFICATE-----\n"
+    "MIIDFDCCAfygAwIBAgIUDM5zmTSP+ewEnuXfq/xVNu2HSpswDQYJKoZIhvcNAQEL\n"
+    "BQAwETEPMA0GA1UEAwwGc2VydmVyMB4XDTI1MDMwMTA2MzIzNFoXDTI2MDMwMTA2\n"
+    "MzIzNFowETEPMA0GA1UEAwwGc2VydmVyMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A\n"
+    "MIIBCgKCAQEAyHJODY8bgnhLyDeKGONpLNN+YXPR9aMnpoRXWBCEyfGBj5d8STls\n"
+    "UHJigjxDSTPzNqzZT0q3vww5v1693JUPSeu0AwPEl6wyY1ciZwpTAw/6lO+tmDNU\n"
+    "024+luU43TE+PGYM1VUuMqeRreIAtwoqRQ+7f7VVYjnCBDWliIjTNfIXqbQfUNll\n"
+    "9usnsGk5aFXG2vHwI+5z+nMyuOUDNLXyNYYqdncunxmEc5RxOB4MXGE0CxeUo4Ec\n"
+    "IwR8RqNpB/ZGwP96XcQZ/Ken5n01fOYivwxIJjcXrpSfbjWZayg5+4mJwwNYMfDa\n"
+    "UQEa54R5yI2lplGDIWvIJPK1XCrBTuKSrQIDAQABo2QwYjAdBgNVHQ4EFgQUs02M\n"
+    "rPjmN4X1jvuaH20xOseW7TEwHwYDVR0jBBgwFoAUs02MrPjmN4X1jvuaH20xOseW\n"
+    "7TEwDwYDVR0TAQH/BAUwAwEB/zAPBgNVHREECDAGhwSsHLakMA0GCSqGSIb3DQEB\n"
+    "CwUAA4IBAQA06JSZ3HcUB6gv5sGo5AAdIHvMCTpuYK5kupmGL/XFiGJa1xDzZeWu\n"
+    "NivfwJO9GfZsePYIA3KKhoQh98iIi3uQs6nsW4xwFYhsoeq7K9vKhSISH6VLpKMb\n"
+    "/YJRLpzwIefvmSoOsdrQ+gv6M+TjfExIsXNCM8/mxjBlqlSxhqSjfSAmGH91Cwcy\n"
+    "Fa3oaz9GiTCU3lIC7tEBx/poqtrV5FZw9Pay8SM1iS+SUaX+kv9RI8WUuuO67QIB\n"
+    "EOsdLUrTIeWgz2YfMTzYDA6BWyGNy09qAQzPSWZ4+7m2FAElhIN8h4hxQ2uUqQPu\n"
+    "/7IYTuI3ixCOZl0vs+oT5zqzoNqpA8zU\n"
+    "-----END CERTIFICATE-----\n";
 
 // MQTT Credentials (To be received from the server)
 String mqtt_broker;
@@ -43,6 +64,11 @@ Preferences preferences;
 // Token for authentication
 String jwt_token;
 
+// Global clients
+WiFiClientSecure secureClient;  // For HTTPS
+WiFiClient espClient;           // For MQTT (non-TLS)
+PubSubClient mqttClient(espClient);
+
 // ESP32 MAC Address
 String getMacAddress() {
     uint8_t mac[6];
@@ -55,10 +81,9 @@ String getMacAddress() {
 // Function to send HTTP POST request
 String sendHttpPost(const String& endpoint, const String& payload) {
     HTTPClient http;
-    WiFiClient client;  // WiFiClient is used for HTTP (non-secure)
 
     String fullUrl = String(server_url) + endpoint;
-    http.begin(client, fullUrl);  // Initiate HTTP connection
+    http.begin(secureClient, fullUrl);  // Use secureClient for HTTPS
     http.addHeader("Content-Type", "application/json");
 
     if (jwt_token != "") {
@@ -140,9 +165,8 @@ bool getMqttInfo() {
     
     // Use WiFiClient for non-secure HTTP connection
     HTTPClient http;
-    WiFiClient client;  // Use WiFiClient for HTTP (non-secure)
 
-    http.begin(client, fullUrl);  // Begin HTTP connection
+    http.begin(secureClient, fullUrl);  // Use secureClient for HTTPS
     http.addHeader("Authorization", "Bearer " + jwt_token);  // Add JWT token for authorization
 
     http.setTimeout(5000);
@@ -198,10 +222,6 @@ void getMqttUsernameFromFlash() {
     preferences.end();  // Close the preferences
 }
 
-// Function to connect to MQTT
-WiFiClientSecure espClient;
-PubSubClient mqttClient(espClient);
-
 void connectToMqtt() {
     Serial.println("Connecting to MQTT broker...");
 
@@ -230,6 +250,9 @@ void setup() {
         Serial.print(".");
     }
     Serial.println("\nWiFi connected!");
+
+    // Set the server's certificate for HTTPS
+    secureClient.setCACert(root_ca);
 
     // Step 1: Validate Device
     if (!validateDevice()) {
