@@ -120,6 +120,7 @@ bool registerDevice() {
         // Store mqtt_username in flash memory
         preferences.begin("device_data", false);  // Open the preferences namespace
         preferences.putString("mqtt_username", mqtt_username);  // Save the username
+        preferences.putString("mqtt_password", mqtt_password);  // Save the password
         preferences.end();  // Close the preferences
 
         Serial.println("Device registered successfully.");
@@ -184,12 +185,14 @@ void getMqttUsernameFromFlash() {
 
     // Check if the username is stored
     String storedUsername = preferences.getString("mqtt_username", "");  // Default to empty string if not found
+    String storedPassword = preferences.getString("mqtt_password", "");  // Default to empty string if not found
     
     if (storedUsername != "") {
         Serial.println("Stored MQTT Username: " + storedUsername);
         mqtt_username = storedUsername;  // Set the mqtt_username to the stored value
+        mqtt_password = storedPassword;  // Set the mqtt_password to the stored value
     } else {
-        Serial.println("No stored MQTT Username found.");
+        Serial.println("No stored MQTT Username found from flash mem.");
     }
 
     preferences.end();  // Close the preferences
