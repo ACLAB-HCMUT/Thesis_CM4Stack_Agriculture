@@ -1,0 +1,44 @@
+name: CI/CD for Node.js IOT Server
+
+on:
+  push:
+    branches:
+      - init_project
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '20' # Adjust to your Node.js version
+      - name: Install dependencies
+        run: npm install
+      - name: List node_modules
+        run: ls -la node_modules/.bin/
+      - name: Fix permissions of node_modules/.bin
+        run: sudo chmod +x node_modules/.bin/*
+      - name: Run tests
+        run: npm test
+
+  deploy:
+    needs: test # Only runs if tests pass
+    runs-on: self-hosted # Runs on your cm4stack
+    steps:
+    #   - name: Change to webserver directory
+    #     run: cd /home/pi/CICD/webserver-cicd-test # Adjust to your project directory
+    #   - name: Switch to Coding branch
+    #     run: git checkout Coding
+    #   - name: Pull latest code
+    #     run: git pull origin Coding 
+    #   - name: Install dependencies
+    #     run: npm install
+    #   - name: Restart web server
+    #     run: sudo systemctl restart webserver
+      - name: Check git status
+        run: git status
+      - name: Check git branch
+        run: git branch

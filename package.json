@@ -1,5 +1,28 @@
 {
   "dependencies": {
     "express": "^4.21.2"
-  }
+  },
+  "devDependencies": {
+    "mocha": "^11.1.0",
+    "supertest": "^7.0.0"
+  },
+  "name": "thesis_cm4stack_agriculture",
+  "version": "1.0.0",
+  "description": "",
+  "main": "config.js",
+  "scripts": {
+    "test": "mocha",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ACLAB-HCMUT/Thesis_CM4Stack_Agriculture.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ACLAB-HCMUT/Thesis_CM4Stack_Agriculture/issues"
+  },
+  "homepage": "https://github.com/ACLAB-HCMUT/Thesis_CM4Stack_Agriculture#readme"
 }
