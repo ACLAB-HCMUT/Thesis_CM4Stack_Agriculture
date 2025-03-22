@@ -1,5 +1,6 @@
 const express = require('express');
 const https = require('https');
+const http = require('http');
 const bodyParser = require('body-parser');
 const jwt = require('jsonwebtoken');
 const env_config = require('./config'); // Import the config module
@@ -14,14 +15,30 @@ const MQTT_BROKER_IP = "172.28.182.164";
 const MQTT_PORT = 1883;
 
 // Certificate
-const options = {
-    key: fs.readFileSync('/home/pi/IOT_Server/server.key'),
-    cert: fs.readFileSync('/home/pi/IOT_Server/server.crt')
-};
+// const options = {
+//     key: fs.readFileSync('/home/pi/IOT_Server/server.key'),
+//     cert: fs.readFileSync('/home/pi/IOT_Server/server.crt')
+// };
 
 // Initialize Express app
 const app = express();
 app.use(bodyParser.json());
+
+// Determine the environment (production or test)
+const isProduction = process.env.NODE_ENV === 'production';
+const isTesting = process.env.NODE_ENV === 'test';
+
+// Configure the server based on the environment
+let server;
+if (isProduction) {
+    const options = {
+        key: fs.readFileSync('/home/pi/IOT_Server/server.key'),
+        cert: fs.readFileSync('/home/pi/IOT_Server/server.crt')
+    };
+    server = https.createServer(options, app);
+} else {
+    server = http.createServer(app); // Use plain HTTP for testing
+}
 
 // Create table for devices if not exists
 db.run(`
@@ -35,6 +52,8 @@ db.run(`
 
 // **Function to Add a Device to Mosquitto**
 function addMqttUser(username, password, callback) {
+    if (isTesting) return callback(null);  // Skip this function in testing
+
     const passwdEntry = `${username}:${password}\n`;  // Format: username:password
 
     // Read the current mosquitto passwd file content
@@ -61,18 +80,20 @@ function addMqttUser(username, password, callback) {
 
 
 // **Function to Add ACL for a Device**
-function addMqttAcl(username) {
+function addMqttAcl(username, callback) {
+    if (isTesting) return callback(null);  // Skip this function in testing
+
     const aclEntry = `
-user ${username}
-topic read ${username}/data
-topic write ${username}/control
-`;
+        user ${username}
+        topic read ${username}/data
+        topic write ${username}/control
+    `;
 
     // Read the current ACL file content
     fs.readFile(MQTT_ACL_FILE, 'utf8', (err, data) => {
         if (err) {
             console.error(`Error reading ACL file: ${err}`);
-            return;
+            return callback(err);
         }
 
         // Check if the file already has content; if so, add a newline before appending the new ACL entry
@@ -82,6 +103,7 @@ topic write ${username}/control
         fs.writeFile(MQTT_ACL_FILE, updatedAclContent, (err) => {
             if (err) {
                 console.error(`Error writing ACL file: ${err}`);
+                return callback(err);
             } else {
                 console.log(`ACL added for ${username}`);
             }
@@ -94,6 +116,8 @@ topic write ${username}/control
 
 // **Function to Reload Mosquitto Without Restart**
 function reloadMosquitto() {
+    if (isTesting) return;  // Skip this function in testing
+    
     exec(`sudo systemctl reload mosquitto`, (error, stdout, stderr) => {
         if (error) {
             console.error(`Error reloading Mosquitto: ${stderr}`);
@@ -147,27 +171,34 @@ app.post('/api/register', (req, res) => {
                 if (err.code === 'SQLITE_CONSTRAINT') {
                     return res.status(409).json({ message: 'Device already registered.' });
                 }
-                return res.status(500).json({ message: 'Database error.' });
+                return res.status(499).json({ message: 'Database error.' });
             }
 
             // Add to Mosquitto authentication and ACL
             addMqttUser(username, password, (mqttErr) => {
                 if (mqttErr) {
-                    return res.status(500).json({ message: 'Failed to add MQTT user.' });
+                    return res.status(501).json({ message: 'Failed to add MQTT user.' });
                 }
 
-                addMqttAcl(username);
-                reloadMosquitto();
+                addMqttAcl(username, (aclErr) => {
+                    if (aclErr) {
+                        return res.status(502).json({ message: 'Failed to add MQTT ACL.' });
+                    }
 
-                res.status(201).json({
-                    message: 'Device registered successfully.',
-                    mqtt_username: username,
-                    mqtt_password: password,
+                    // Reload Mosquitto
+                    reloadMosquitto();
+
+                    res.status(201).json({
+                        message: 'Device registered successfully.',
+                        mqtt_username: username,
+                        mqtt_password: password,
+                    });
                 });
             });
         }
     );
 });
+
 
 // Middleware to verify JWT token
 function verifyToken(req, res, next) {
@@ -226,9 +257,31 @@ app.get('/api/get-mqtt-info', verifyToken, (req, res) => {
 
 
 // Start HTTPS server
-const SERVER_IP = '172.28.182.164'; 
-const PORT = 3000; // Standard HTTPS port
-https.createServer(options, app).listen(PORT, SERVER_IP, () => {
-    console.log(`HTTPS Server running at https://${SERVER_IP}:${PORT}`);
-    reloadMosquitto();
-});
+// const SERVER_IP = '0.0.0.0'; 
+// const PORT = 3000; // Standard HTTPS port
+// // https.createServer(options, app).listen(PORT, SERVER_IP, () => {
+// //     console.log(`HTTPS Server running at https://${SERVER_IP}:${PORT}`);
+// //     reloadMosquitto();
+// // });
+// server.listen(PORT, SERVER_IP, () => {
+//     console.log(`Server running at ${isProduction ? 'https' : 'http'}://${SERVER_IP}:${PORT}`);
+//     reloadMosquitto();
+// });
+
+// Start the server only if this file is run directly
+const SERVER_IP = '0.0.0.0';
+const PORT = 3000;
+if (require.main === module) {
+    server.listen(PORT, SERVER_IP, () => {
+        console.log(`Server running at ${isProduction ? 'https' : 'http'}://${SERVER_IP}:${PORT}`);
+        reloadMosquitto();
+    });
+}
+
+// Export the app and functions for testing
+module.exports = {
+    app,
+    addMqttUser,
+    addMqttAcl,
+    reloadMosquitto
+};

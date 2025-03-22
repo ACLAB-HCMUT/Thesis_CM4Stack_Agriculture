@@ -7,7 +7,10 @@
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {
+    "chai": "^5.2.0",
+    "cross-env": "^7.0.3",
     "mocha": "^11.1.0",
+    "sinon": "^19.0.4",
     "supertest": "^7.0.0"
   },
   "name": "thesis_cm4stack_agriculture",
@@ -15,7 +18,7 @@
   "description": "",
   "main": "config.js",
   "scripts": {
-    "test": "mocha",
+    "test": "cross-env NODE_ENV=test mocha",
     "start": "node server.js"
   },
   "repository": {

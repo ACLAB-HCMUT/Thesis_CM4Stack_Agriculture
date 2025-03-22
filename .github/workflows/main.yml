@@ -17,12 +17,15 @@ jobs:
           node-version: '20' # Adjust to your Node.js version
       - name: Install dependencies
         run: npm install
-      - name: List node_modules
-        run: ls -la node_modules/.bin/
+      # Fetch the secret variable and set it as an environment variable
+      - name: Set JWT Secret Key
+        run: echo "JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}" >> $GITHUB_ENV
       - name: Fix permissions of node_modules/.bin
         run: sudo chmod +x node_modules/.bin/*
       - name: Run tests
         run: npm test
+        env:
+          NODE_ENV: test
 
   deploy:
     needs: test # Only runs if tests pass
