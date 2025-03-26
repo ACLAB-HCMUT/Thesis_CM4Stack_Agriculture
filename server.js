@@ -85,8 +85,8 @@ function addMqttAcl(username, callback) {
 
     const aclEntry = `
         user ${username}
-        topic read ${username}/data
-        topic write ${username}/control
+        topic read controllers/${username}/#
+        topic write sensors/${username}/#
     `;
 
     // Read the current ACL file content
@@ -110,7 +110,6 @@ function addMqttAcl(username, callback) {
         });
     });
 }
-
 
 
 
@@ -243,8 +242,8 @@ app.get('/api/get-mqtt-info', verifyToken, (req, res) => {
             port: MQTT_PORT,
             username: username,  // Return the same username
             topics: [
-                `${username}/data`,
-                `${username}/control`
+                `sensors/${username}/#`,
+                `controllers/${username}/#`
             ]
         };
 
