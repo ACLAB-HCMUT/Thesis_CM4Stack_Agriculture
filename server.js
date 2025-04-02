@@ -10,7 +10,7 @@ const fs = require('fs');
 
 // Define Mosquitto configuration paths
 const MQTT_PASSWD_FILE = "/etc/mosquitto/pwfile";
-const MQTT_ACL_FILE = "/etc/mosquitto/aclfile";
+const MQTT_ACL_FILE = "/etc/mosquitto/aclfile.acl";
 const MQTT_BROKER_IP = "172.28.182.164";
 const MQTT_PORT = 1883;
 
@@ -84,9 +84,9 @@ function addMqttAcl(username, callback) {
     if (isTesting) return callback(null);  // Skip this function in testing
 
     const aclEntry = `
-        user ${username}
-        topic read controllers/${username}/#
-        topic write sensors/${username}/#
+    user ${username}
+    topic read controllers/${username}/#
+    topic write sensors/${username}/#
     `;
 
     // Read the current ACL file content
