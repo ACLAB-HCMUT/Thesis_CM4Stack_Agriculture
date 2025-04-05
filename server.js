@@ -54,26 +54,49 @@ db.run(`
 function addMqttUser(username, password, callback) {
     if (isTesting) return callback(null);  // Skip this function in testing
 
-    const passwdEntry = `${username}:${password}\n`;  // Format: username:password
+    const tempFile = `/tmp/temp_pwfile_${Date.now()}`; // Unique temporary file
+    const plainEntry = `${username}:${password}\n`;
 
-    // Read the current mosquitto passwd file content
-    fs.readFile(MQTT_PASSWD_FILE, 'utf8', (err, data) => {
-        if (err && err.code !== 'ENOENT') {
-            console.error(`Error reading password file: ${err}`);
+    // Step 1: Write plain-text entry to temporary file
+    fs.writeFile(tempFile, plainEntry, (err) => {
+        if (err) {
+            console.error(`Error writing temporary file: ${err}`);
             return callback(err);
         }
 
-        // Append the new username and password to the file content
-        const updatedPasswdContent = data ? data + passwdEntry : passwdEntry;
-
-        // Write the updated content back to the password file
-        fs.writeFile(MQTT_PASSWD_FILE, updatedPasswdContent, (err) => {
+        // Step 2: Hash the temporary file using mosquitto_passwd -U
+        exec(`sudo mosquitto_passwd -U ${tempFile}`, (err, stdout, stderr) => {
             if (err) {
-                console.error(`Error writing password file: ${err}`);
+                console.error(`Error hashing password: ${stderr}`);
+                fs.unlink(tempFile, () => {}); // Clean up on error
                 return callback(err);
             }
-            console.log(`Added MQTT user: ${username}`);
-            callback(null);
+
+            // Step 3: Read the hashed entry
+            fs.readFile(tempFile, 'utf8', (err, hashedEntry) => {
+                if (err) {
+                    console.error(`Error reading hashed entry: ${err}`);
+                    fs.unlink(tempFile, () => {}); // Clean up on error
+                    return callback(err);
+                }
+
+                // Step 4: Append to the main pwfile
+                fs.appendFile(MQTT_PASSWD_FILE, hashedEntry, { flag: 'a' }, (err) => {
+                    if (err) {
+                        console.error(`Error appending to pwfile: ${err}`);
+                        fs.unlink(tempFile, () => {}); // Clean up on error
+                        return callback(err);
+                    }
+
+                    console.log(`Added MQTT user: ${username}`);
+
+                    // Step 5: Delete the temporary file
+                    fs.unlink(tempFile, (err) => {
+                        if (err) console.error(`Error deleting temporary file: ${err}`);
+                        callback(null);
+                    });
+                });
+            });
         });
     });
 }
