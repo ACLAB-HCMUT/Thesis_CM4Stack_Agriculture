@@ -39,8 +39,8 @@ jobs:
         run: git pull origin init_project 
       - name: Install dependencies
         run: npm install
-      - name: Restart iot server
-        run: sudo systemctl restart iotserver
+      - name: Reload iot server
+        run: sudo systemctl reload iotserver
       - name: Check git status
         run: git status
       - name: Check git branch

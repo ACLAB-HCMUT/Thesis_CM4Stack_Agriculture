@@ -84,30 +84,38 @@ function addMqttAcl(username, callback) {
     if (isTesting) return callback(null);  // Skip this function in testing
 
     const aclEntry = `
-    user ${username}
-    topic read controllers/${username}/#
-    topic write sensors/${username}/#
+user ${username}
+topic read controllers/${username}/#
+topic write sensors/${username}/#
     `;
 
-    // Read the current ACL file content
-    fs.readFile(MQTT_ACL_FILE, 'utf8', (err, data) => {
-        if (err) {
-            console.error(`Error reading ACL file: ${err}`);
-            return callback(err);
+    // // Read the current ACL file content
+    // fs.readFile(MQTT_ACL_FILE, 'utf8', (err, data) => {
+    //     if (err) {
+    //         console.error(`Error reading ACL file: ${err}`);
+    //         return callback(err);
+    //     }
+
+    //     // Check if the file already has content; if so, add a newline before appending the new ACL entry
+    //     const updatedAclContent = data.trim() + '\n' + aclEntry;
+
+    //     // Write the updated content back to the ACL file
+    //     fs.writeFile(MQTT_ACL_FILE, updatedAclContent, (err) => {
+    //         if (err) {
+    //             console.error(`Error writing ACL file: ${err}`);
+    //             return callback(err);
+    //         } else {
+    //             console.log(`ACL added for ${username}`);
+    //         }
+    //     });
+    // });
+    exec(`echo "${aclEntry}" | sudo /usr/local/bin/append_to_acl.sh`, (error, stdout, stderr) => {
+        if (error) {
+            console.error(`Error updating ACL file: ${error}`);
+            return callback(error);
         }
-
-        // Check if the file already has content; if so, add a newline before appending the new ACL entry
-        const updatedAclContent = data.trim() + '\n' + aclEntry;
-
-        // Write the updated content back to the ACL file
-        fs.writeFile(MQTT_ACL_FILE, updatedAclContent, (err) => {
-            if (err) {
-                console.error(`Error writing ACL file: ${err}`);
-                return callback(err);
-            } else {
-                console.log(`ACL added for ${username}`);
-            }
-        });
+        console.log(`ACL added for ${username}`);
+        callback(null);
     });
 }
 
