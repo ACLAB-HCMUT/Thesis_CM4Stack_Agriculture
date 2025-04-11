@@ -14,12 +14,6 @@ const MQTT_ACL_FILE = "/etc/mosquitto/aclfile.acl";
 const MQTT_BROKER_IP = "172.28.182.164";
 const MQTT_PORT = 1883;
 
-// Certificate
-// const options = {
-//     key: fs.readFileSync('/home/pi/IOT_Server/server.key'),
-//     cert: fs.readFileSync('/home/pi/IOT_Server/server.crt')
-// };
-
 // Initialize Express app
 const app = express();
 app.use(bodyParser.json());
@@ -46,7 +40,8 @@ db.run(`
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         mac_address TEXT UNIQUE,
         username TEXT,
-        password TEXT
+        password TEXT,
+        refresh_token TEXT
     )
 `);
 
@@ -111,27 +106,6 @@ user ${username}
 topic read controllers/${username}/#
 topic write sensors/${username}/#
     `;
-
-    // // Read the current ACL file content
-    // fs.readFile(MQTT_ACL_FILE, 'utf8', (err, data) => {
-    //     if (err) {
-    //         console.error(`Error reading ACL file: ${err}`);
-    //         return callback(err);
-    //     }
-
-    //     // Check if the file already has content; if so, add a newline before appending the new ACL entry
-    //     const updatedAclContent = data.trim() + '\n' + aclEntry;
-
-    //     // Write the updated content back to the ACL file
-    //     fs.writeFile(MQTT_ACL_FILE, updatedAclContent, (err) => {
-    //         if (err) {
-    //             console.error(`Error writing ACL file: ${err}`);
-    //             return callback(err);
-    //         } else {
-    //             console.log(`ACL added for ${username}`);
-    //         }
-    //     });
-    // });
     exec(`echo "${aclEntry}" | sudo /usr/local/bin/append_to_acl.sh`, (error, stdout, stderr) => {
         if (error) {
             console.error(`Error updating ACL file: ${error}`);
@@ -160,23 +134,36 @@ function reloadMosquitto() {
 // Validate API
 app.post('/api/validate', (req, res) => {
     const { mac_address } = req.body;
-
-    if (!mac_address) {
-        return res.status(400).json({ message: 'MAC address is required.' });
-    }
-
-    // Check if the device is registered
+    if (!mac_address) return res.status(400).json({ message: 'MAC address is required.' });
     db.get('SELECT username, password FROM devices WHERE mac_address = ?', [mac_address], (err, row) => {
         if (err) return res.status(500).json({ message: 'Database error.' });
-
         if (row) {
-            // Device is registered, generate a token
-            const token = jwt.sign({ mac_address }, env_config.JWT_SECRET_KEY, { expiresIn: '1h' });
-            return res.status(200).json({ message: 'Device validated.', token });
+            const accessToken = jwt.sign({ mac_address }, env_config.JWT_SECRET_KEY, { expiresIn: '1h' });
+            const refreshToken = jwt.sign({ mac_address }, env_config.REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
+            db.run('UPDATE devices SET refresh_token = ? WHERE mac_address = ?', [refreshToken, mac_address], (err) => {
+                if (err) return res.status(500).json({ message: 'Database error.' });
+                return res.status(200).json({ message: 'Device validated.', accessToken, refreshToken });
+            });
         } else {
-            // Device not registered
             return res.status(404).json({ message: 'Device not registered.' });
         }
+    });
+});
+
+// Refresh Token API
+app.post('/api/refresh-token', (req, res) => {
+    const { refreshToken } = req.body;
+    if (!refreshToken) return res.status(400).json({ message: 'Refresh token is required.' });
+    jwt.verify(refreshToken, env_config.REFRESH_TOKEN_SECRET, (err, decoded) => {
+        if (err) return res.status(403).json({ message: 'Invalid or expired refresh token.' });
+        const mac_address = decoded.mac_address;
+        db.get('SELECT refresh_token FROM devices WHERE mac_address = ?', [mac_address], (err, row) => {
+            if (err || !row || row.refresh_token !== refreshToken) {
+                return res.status(403).json({ message: 'Invalid refresh token.' });
+            }
+            const newAccessToken = jwt.sign({ mac_address }, env_config.JWT_SECRET_KEY, { expiresIn: '1h' });
+            return res.status(200).json({ message: 'Access token refreshed.', accessToken: newAccessToken });
+        });
     });
 });
 
@@ -233,8 +220,8 @@ app.post('/api/register', (req, res) => {
 // Middleware to verify JWT token
 function verifyToken(req, res, next) {
     const authHeader = req.headers['authorization']; 
-	const token = authHeader && authHeader.split(' ')[1]; // Safer alternative
-    
+	const token = authHeader && authHeader.split(' ')[1]; 
+
     if (!token) {
         return res.status(403).json({ message: 'Token is required.' });
     }
@@ -286,18 +273,6 @@ app.get('/api/get-mqtt-info', verifyToken, (req, res) => {
 });
 
 
-// Start HTTPS server
-// const SERVER_IP = '0.0.0.0'; 
-// const PORT = 3000; // Standard HTTPS port
-// // https.createServer(options, app).listen(PORT, SERVER_IP, () => {
-// //     console.log(`HTTPS Server running at https://${SERVER_IP}:${PORT}`);
-// //     reloadMosquitto();
-// // });
-// server.listen(PORT, SERVER_IP, () => {
-//     console.log(`Server running at ${isProduction ? 'https' : 'http'}://${SERVER_IP}:${PORT}`);
-//     reloadMosquitto();
-// });
-
 // Start the server only if this file is run directly
 const SERVER_IP = '0.0.0.0';
 const PORT = 3000;
@@ -309,9 +284,4 @@ if (require.main === module) {
 }
 
 // Export the app and functions for testing
-module.exports = {
-    app,
-    addMqttUser,
-    addMqttAcl,
-    reloadMosquitto
-};
+module.exports = { app, addMqttUser, addMqttAcl, reloadMosquitto };

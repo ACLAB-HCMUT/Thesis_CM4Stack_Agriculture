@@ -20,6 +20,8 @@ jobs:
       # Fetch the secret variable and set it as an environment variable
       - name: Set JWT Secret Key
         run: echo "JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}" >> $GITHUB_ENV
+      - name: Set Refresh Secret Key
+        run: echo "REFRESH_TOKEN_SECRET=${{ secrets.REFRESH_TOKEN_SECRET }}" >> $GITHUB_ENV
       - name: Fix permissions of node_modules/.bin
         run: sudo chmod +x node_modules/.bin/*
       - name: Run tests
@@ -35,12 +37,12 @@ jobs:
       #   run: cd /home/pi/CICD/webserver-cicd-test # Adjust to your project directory
       - name: Switch to init_project branch
         run: git checkout init_project
-      - name: Pull latest code
-        run: git pull origin init_project 
-      - name: Install dependencies
-        run: npm install
-      - name: Reload iot server
-        run: sudo systemctl reload iotserver
+      # - name: Pull latest code
+      #   run: git pull origin init_project 
+      # - name: Install dependencies
+      #   run: npm install
+      # - name: Reload iot server
+      #   run: sudo systemctl reload iotserver
       - name: Check git status
         run: git status
       - name: Check git branch
