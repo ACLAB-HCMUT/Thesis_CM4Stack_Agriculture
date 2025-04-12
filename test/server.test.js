@@ -149,6 +149,31 @@ describe('IoT Server API', () => {
             expect(res.body.message).to.equal('Token is required.');
         });
 
+        it('should return 403 if access token is invalid', async () => {
+            const invalidToken = "invalid_token_string";
+            const res = await request(app)
+                .get('/api/get-mqtt-info')
+                .set('Authorization', `Bearer ${invalidToken}`)
+                .query({ username: 'user_001122334455' });
+            expect(res.status).to.equal(403);
+            expect(res.body.message).to.equal('Invalid or expired token.');
+        });
+        
+        it('should return 403 if access token is expired', async () => {
+            const expiredToken = jwt.sign(
+                {mac_address: '00:11:22:33:44:55'},
+                process.env.JWT_SECRET_KEY || 'your_jwt_secret',
+                { expiresIn: '1ms' }
+            );
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            const res = await request(app)
+                .get('/api/get-mqtt-info')
+                .set('Authorization', `Bearer ${expiredToken}`)
+                .query({ username: 'user_001122334455' });
+            expect(res.status).to.equal(403);
+            expect(res.body.message).to.equal('Invalid or expired token.');
+        });
+
         it('should return 404 if username is not found', async () => {
             const token = jwt.sign(
                 { mac_address: '00:11:22:33:44:55' },
