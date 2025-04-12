@@ -105,7 +105,7 @@ function addMqttAcl(username, callback) {
 user ${username}
 topic read controllers/${username}/#
 topic write sensors/${username}/#
-    `;
+`;
     exec(`echo "${aclEntry}" | sudo /usr/local/bin/append_to_acl.sh`, (error, stdout, stderr) => {
         if (error) {
             console.error(`Error updating ACL file: ${error}`);
