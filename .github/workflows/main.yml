@@ -37,12 +37,12 @@ jobs:
       #   run: cd /home/pi/CICD/webserver-cicd-test # Adjust to your project directory
       - name: Switch to init_project branch
         run: git checkout init_project
-      - name: Pull latest code
-        run: git pull origin init_project 
-      - name: Install dependencies
-        run: npm install
-      - name: Reload iot server
-        run: sudo systemctl reload iotserver
+      # - name: Pull latest code
+      #   run: git pull origin init_project 
+      # - name: Install dependencies
+      #   run: npm install
+      # - name: Reload iot server
+      #   run: sudo systemctl reload iotserver
       - name: Check git status
         run: git status
       - name: Check git branch
